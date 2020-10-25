@@ -1,7 +1,6 @@
 # STGAL: Space-Time Guided Association Learning For Unsupervised Person Re-Identification
 
-This is the code for paper: "Space-Time Guided Association Learning
-For Unsupervised Person Re-Identification." _ICIP_, 2020.  
+This is the code for paper: "Space-Time Guided Association Learning For Unsupervised Person Re-Identification." _IEEE International Conference on Image Processing_, 2020.  
 [[project page](http://media.ee.ntu.edu.tw/research/STGAL/)]
 [[paper](http://media.ee.ntu.edu.tw/research/STGAL/paper/wu2020_stgal.pdf)]
 

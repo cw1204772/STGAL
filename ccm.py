@@ -94,11 +94,6 @@ def get_visual_threshold(pkl, db, low_p):
                 mask2 = (db['track_uuid'] == track_uuid)
                 neg_mask[mask1, :] = mask2
     
-    print('low_p = 0.1, ', np.percentile(dist[neg_mask], 0.1)) 
-    print('low_p = 1, ', np.percentile(dist[neg_mask], 1)) 
-    print('low_p = 2, ', np.percentile(dist[neg_mask], 2)) 
-    print('low_p = 5, ', np.percentile(dist[neg_mask], 5)) 
-    print('low_p = 10, ', np.percentile(dist[neg_mask], 10)) 
     return np.percentile(dist[pos_mask], 99), np.percentile(dist[neg_mask], low_p)
 
 def build_delta_stats(db, visual_threshold, n_cams, abs):
@@ -272,28 +267,6 @@ def aug_pos_pairs(pairs):
 
     return unique_tracks
 
-def aug_pos_pairs2(pairs):
-    track2idx = {}
-    idx = 0
-    for i, (track1, track2) in enumerate(pairs):
-        if track1 not in track2idx:
-            track2idx[track1] = idx
-            idx += 1
-        if track2 not in track2idx:
-            track2idx[track2] = idx
-            idx += 1
-        # Change all tracks that have track2_idx to track1_idx
-        temp = track2idx[track2]
-        for k, v in track2idx.items():
-            if v == temp:
-                track2idx[k] = track2idx[track1]
-    idx2track = {}
-    for k, v in track2idx.items():
-        if v not in idx2track:
-            idx2track[v] = []
-        idx2track[v].append(k)
-    return list(idx2track.values())
-
 def write_samples(pkl, save_pkl, pos_pairs, neg_pairs, delete_ctm=False):
     """Write cross camera samples to pkl"""
     print('write samples to pkl')
@@ -325,39 +298,6 @@ def write_samples(pkl, save_pkl, pos_pairs, neg_pairs, delete_ctm=False):
 
     with open(save_pkl, 'wb') as f:
         pickle.dump({'afl_samples':afl_samples, 'track_dict':track_dict}, f, protocol=pickle.HIGHEST_PROTOCOL)
-
-def plot_pos_neg_prob_hist(db, prob, save_name='pos_neg_prob_hist.png', bins=50):
-    """Plot histogram of probability of pos/neg pair"""
-    mask = np.arange(db['cam'].shape[0]) > np.arange(db['cam'].shape[0]).reshape(-1,1)
-    pos = (db['label'] == db['label'].reshape(-1,1))
-    pos_hist = prob[mask & pos]
-    neg_hist = prob[mask & ~pos]
-
-    import matplotlib
-    matplotlib.use('Agg')
-    import matplotlib.pyplot as plt
-    pos_w = np.ones_like(pos_hist) / len(pos_hist)
-    neg_w = np.ones_like(neg_hist) / len(neg_hist)
-    plt.figure()
-    plt.hist([pos_hist, neg_hist], bins=bins, label=['pos', 'neg'], weights=[pos_w, neg_w])
-    plt.legend()
-    plt.savefig(save_name)
-
-def plot_travel_model(delta_prob, bins, save_dir='.'):
-    """Plot traveling probability model"""
-    import matplotlib
-    matplotlib.use('Agg')
-    import matplotlib.pyplot as plt
-    #x = np.arange(-max_delta, 0, step=DELTA_BIN_SIZE)[:-1]
-    colors = ['#0086FF', '#44BEC7', '#FFC300', '#FA3C4C', '#D696BB', '#60CB40', '#EF8441', '#6E50F6']
-    for i in range(len(delta_prob)):
-        for j in range(len(delta_prob)):
-            plt.figure(figsize=[3.25, 2.25])
-            label = 'cam%d -> cam%d' % (i+1, j+1)
-            plt.plot(bins[1667:1667+20], delta_prob[i][j][1667:1667+20], label=label, color=colors[i])
-            plt.savefig(os.path.join(save_dir, 'AFL_cam%d_cam%d_travel_model.png' % (i+1, j+1)))
-        #plt.ylim(0, 0.1)
-        #plt.legend()
 
  
 if __name__ == '__main__':
@@ -414,8 +354,6 @@ if __name__ == '__main__':
     # Determine visual threshold for building travel model
     max_pos_vdist, min_neg_vdist = get_visual_threshold(args.train_pkl, train_db, args.low_p)
     print('max_pos_vdist:', max_pos_vdist, 'min_neg_vdist:', min_neg_vdist)
-    plot_pos_neg_prob_hist(train_db, cmc.sqdist(train_db['feature'], train_db['feature']), 'figures/img_visual_dist.png')
-    #exit()
      
     # Build delta distributions
     pos_delta_stats = build_delta_stats(train_db, min_neg_vdist, n_cams, args.abs)
@@ -434,9 +372,6 @@ if __name__ == '__main__':
     
     # Convert delta distribution to probability
     pos_delta_prob, bins = build_delta_prob(pos_delta_stats, n_cams, max_delta, delta_bin_size)
-    #print(bins.shape)
-    #plot_travel_model(pos_delta_prob, bins, save_dir='./figures')
-    #exit()
   
     # Calculate fusion score
     train_visual_prob = np.exp(-1*args.a*cmc.sqdist(train_db['feature'], train_db['feature']))
@@ -457,20 +392,14 @@ if __name__ == '__main__':
     
     if args.save_pkl is not None:
         # Mine CCM examples on train set
-        #train_track_visual_prob = img_to_track_score(train_db, train_track_db, train_visual_prob)
-        #train_track_fusion_score = img_to_track_score(train_db, train_track_db, train_fusion_score)
-        train_track_visual_prob = np.load('train_track_visual_prob.npy')
-        train_track_fusion_score = np.load('train_track_fusion_score.npy')
+        train_track_visual_prob = img_to_track_score(train_db, train_track_db, train_visual_prob)
+        train_track_fusion_score = img_to_track_score(train_db, train_track_db, train_fusion_score)
         pos_pairs, neg_pairs = get_samples(args, train_track_db, train_track_fusion_score, train_track_visual_prob, 
             k=args.k, v_low=np.exp(-args.a*max_pos_vdist), v_high=np.exp(-args.a*min_neg_vdist), 
             n=args.n, sample_mode=args.sample_mode)
 
-        temp_pos_pairs = aug_pos_pairs2(pos_pairs)
         pos_pairs = aug_pos_pairs(pos_pairs)
-        print(len(temp_pos_pairs))
-        print(len(pos_pairs))
-
         
         # Write the samples to pkl
-        #write_samples(args.train_pkl, args.save_pkl, pos_pairs, neg_pairs, args.delete_ctm)
+        write_samples(args.train_pkl, args.save_pkl, pos_pairs, neg_pairs, args.delete_ctm)
     
